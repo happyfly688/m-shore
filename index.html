@@ -140,45 +140,100 @@ a {
     left: 0;
     right: 0;
     z-index: 100;
-    background: rgba(255, 255, 255, 0.72);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
-    border-bottom: 1px solid rgba(0,0,0,0.08);
+    background: rgba(255, 255, 255, 0.78);
+    backdrop-filter: saturate(200%) blur(24px);
+    -webkit-backdrop-filter: saturate(200%) blur(24px);
+    border-bottom: 1px solid rgba(0,0,0,0.06);
+    transition: background 0.3s ease, border-color 0.3s ease;
+}
+/* 顶部超细渐变装饰线 */
+.nav::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent 0%, rgba(0,113,227,0.30) 20%, rgba(175,82,222,0.30) 80%, transparent 100%);
+    pointer-events: none;
+}
+/* 滚动后更不透明 */
+.nav.scrolled {
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom-color: rgba(0,0,0,0.10);
 }
 
 .nav-inner {
     max-width: 1024px;
     margin: 0 auto;
     padding: 0 24px;
-    height: 48px;
+    height: 52px;
     display: flex;
     align-items: center;
     justify-content: space-between;
 }
 
 .nav-logo {
-    font-size: 20px;
-    font-weight: 690;
+    font-size: 19px;
+    font-weight: 650;
     letter-spacing: -0.02em;
     color: #1d1d1f;
-    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.25s;
 }
-.nav-logo:hover { opacity: 0.5; }
+/* logo 前的小蓝点 */
+.nav-logo::before {
+    content: '';
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: #0071e3;
+    flex-shrink: 0;
+}
+.nav-logo:hover { opacity: 0.55; }
 
 .nav-links {
     display: flex;
-    gap: 28px;
+    gap: 32px;
     list-style: none;
 }
 
 .nav-links a {
     font-size: 13px;
     font-weight: 480;
-    color: #424245;
+    color: #6e6e73;
     letter-spacing: -0.01em;
-    transition: color 0.2s;
+    padding: 6px 0;
+    transition: color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
 }
-.nav-links a:hover { color: #0071e3; }
+/* 下划线 — 默认隐藏，hover 预览，active 显示 */
+.nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 2px;
+    background: #0071e3;
+    transform: scaleX(0);
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.nav-links a:hover {
+    color: #1d1d1f;
+}
+.nav-links a:hover::after {
+    transform: scaleX(1);
+    background: rgba(0,0,0,0.15);
+}
+.nav-links a.active {
+    color: #0071e3;
+    font-weight: 540;
+}
+.nav-links a.active::after {
+    transform: scaleX(1);
+    background: #0071e3;
+}
 
 .nav-toggle { display: none; }
 
@@ -1132,19 +1187,22 @@ a {
     .nav-links {
         display: none;
         position: absolute;
-        top: 48px;
+        top: 52px;
         left: 0;
         right: 0;
         flex-direction: column;
         background: rgba(255,255,255,0.96);
-        backdrop-filter: saturate(180%) blur(20px);
-        -webkit-backdrop-filter: saturate(180%) blur(20px);
-        border-bottom: 1px solid rgba(0,0,0,0.08);
-        padding: 16px 24px;
-        gap: 14px;
+        backdrop-filter: saturate(200%) blur(24px);
+        -webkit-backdrop-filter: saturate(200%) blur(24px);
+        border-bottom: 1px solid rgba(0,0,0,0.06);
+        padding: 12px 24px 16px;
+        gap: 2px;
     }
     .nav-links.open { display: flex; }
-    .nav-links a { font-size: 15px; }
+    .nav-links a {
+        font-size: 15px;
+        padding: 10px 0;
+    }
 
     .nav-toggle {
         display: block;
@@ -1269,7 +1327,7 @@ a {
 }
 @media (max-width: 768px) {
     .update-bar {
-        top: 48px;
+        top: 56px;
         left: 12px; right: 12px;
         transform: translateY(-120px);
         border-radius: 14px;
@@ -1542,27 +1600,86 @@ a {
     }, { threshold: 0.15 });
     fadeEls.forEach(function(el) { observer.observe(el); });
 
+    /* ============================================================
+       导航栏 — 滚动感知：激活高亮 + 背景
+       ============================================================ */
+    var nav = document.getElementById('nav');
+    var navLinks = document.querySelectorAll('.nav-links a[data-nav]');
+    var navClickedAt = 0;
+    var navLockedLink = null;
+
+    var sections = [];
+    navLinks.forEach(function(a){
+        var id = a.getAttribute('href').replace('#','');
+        var el = document.getElementById(id);
+        if (el) sections.push({ el: el, link: a });
+    });
+
+    function setActive(link) {
+        navLinks.forEach(function(l){ l.classList.remove('active'); });
+        if (link) link.classList.add('active');
+    }
+
+    function findCurrentSection() {
+        var navH = nav.offsetHeight;
+        // 用 getBoundingClientRect 找顶部已进入 nav 下方的 section
+        for (var i = sections.length - 1; i >= 0; i--) {
+            var top = sections[i].el.getBoundingClientRect().top;
+            if (top <= navH + 100) {
+                return sections[i].link;
+            }
+        }
+        return sections[0] ? sections[0].link : null;
+    }
+
+    function onScroll() {
+        var scrollY = window.scrollY || window.pageYOffset;
+
+        // 导航栏 scrolled 状态
+        nav.classList.toggle('scrolled', scrollY > 60);
+
+        // 点击锁定期间用锁定的 link，否则实时查找
+        if (navLockedLink && Date.now() - navClickedAt < 800) {
+            setActive(navLockedLink);
+        } else {
+            navLockedLink = null;
+            setActive(findCurrentSection());
+        }
+    }
+
+    // 点击导航立即高亮，锁定 800ms
+    navLinks.forEach(function(a){
+        a.addEventListener('click', function(){
+            navClickedAt = Date.now();
+            navLockedLink = a;
+            setActive(a);
+        });
+    });
+
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+
     /* 推荐公告 — 固定在页面上 */
 
     /* ============================================================
        移动端汉堡菜单
        ============================================================ */
     var navToggle = document.getElementById('navToggle');
-    var navLinks  = document.getElementById('navLinks');
+    var navMenu   = document.getElementById('navLinks');
 
     navToggle.addEventListener('click', function() {
-        navLinks.classList.toggle('open');
+        navMenu.classList.toggle('open');
     });
 
     document.querySelectorAll('[data-nav]').forEach(function(a) {
         a.addEventListener('click', function() {
-            navLinks.classList.remove('open');
+            navMenu.classList.remove('open');
         });
     });
 
     document.addEventListener('click', function(e) {
-        if (!navToggle.contains(e.target) && !navLinks.contains(e.target)) {
-            navLinks.classList.remove('open');
+        if (!navToggle.contains(e.target) && !navMenu.contains(e.target)) {
+            navMenu.classList.remove('open');
         }
     });
 
